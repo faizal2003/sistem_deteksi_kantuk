@@ -95,8 +95,13 @@ class DrowsinessDetectionApp:
         self.ear_label.grid(row=0, column=0, padx=5, pady=1, sticky="w")
         
         self.threshold_label = tk.Label(self.status_frame, text="Threshold: 0.00", 
-                                       font=status_font, bg="#8DA9DB", fg="blue", width=12, anchor="w")
+                                       font=status_font, bg="#8DA9DB", fg="blue", width=14, anchor="w")
         self.threshold_label.grid(row=0, column=1, padx=5, pady=1, sticky="w")
+        
+        self.left_eye_position = tk.Label(self.status_frame, text="Left Eye: center", 
+                                       font=status_font, bg="#8DA9DB", fg="blue", width=18, anchor="w")
+        self.left_eye_position.grid(row=0, column=2, padx=5, pady=1, sticky="w")
+        
         
         # Second row
         self.head_tilt_label = tk.Label(self.status_frame, text="Head Tilt: 0.00°", 
@@ -106,6 +111,11 @@ class DrowsinessDetectionApp:
         self.mar_label = tk.Label(self.status_frame, text="MAR: 0.00", 
                                  font=status_font, bg="#8DA9DB", fg="green", width=12, anchor="w")
         self.mar_label.grid(row=1, column=1, padx=5, pady=1, sticky="w")
+        
+        self.right_eye_position = tk.Label(self.status_frame, text="Right Eye: center", 
+                                       font=status_font, bg="#8DA9DB", fg="blue", width=18, anchor="w")
+        self.right_eye_position.grid(row=1, column=2, padx=5, pady=1, sticky="w")
+        
         
         # Control buttons - smaller for Raspberry Pi screen
         self.start_button = tk.Button(self.button_frame, text="START", font=button_font,
@@ -180,6 +190,7 @@ class DrowsinessDetectionApp:
             return
         
         self.cap = cv2.VideoCapture(0)
+        # self.cap.set(cv2.CAP_PROP_FPS, 15)
         if not self.cap.isOpened():
             tk.messagebox.showerror("Error", "Cannot open camera!")
             return
@@ -219,6 +230,8 @@ class DrowsinessDetectionApp:
         self.threshold_label.config(text="Threshold: 0.00")
         self.head_tilt_label.config(text="Head Tilt: 0.00°")
         self.mar_label.config(text="MAR: 0.00")
+        self.left_eye_position.config(text="Left eye: center")
+        self.right_eye_position.config(text="Right eye: center")
         
         # Release the camera
         if self.cap is not None and self.cap.isOpened():
@@ -384,6 +397,17 @@ class DrowsinessDetectionApp:
                     right_ear = self.calculate_ear(right_eye_points)
                     average_ear = (left_ear + right_ear) / 2.0
                     distance = self.lip_distance(landmarks)
+                    
+                                            # Get eye tracking data from module if available
+                    image, PointList = m.faceLandmakDetector(frame, gray_frame, face, False)
+                    RightEyePoint = PointList[36:42]
+                    LeftEyePoint = PointList[42:48]
+                    leftRatio, topMid, bottomMid = m.blinkDetector(LeftEyePoint)
+                    rightRatio, rTop, rBottom = m.blinkDetector(RightEyePoint)
+                        
+                    mask, pos, color = m.EyeTracking(frame, gray_frame, RightEyePoint)
+                    maskleft, leftPos, leftColor = m.EyeTracking(frame, gray_frame, LeftEyePoint)
+                    # print(pos, leftPos)
 
                     # Draw contours
                     cv2.drawContours(display_frame, [cv2.convexHull(left_eye_points)], -1, (0, 255, 0), 1)
@@ -395,21 +419,11 @@ class DrowsinessDetectionApp:
                         text=f"EAR: {ear:.2f}"))
                     self.root.after(0, lambda mar=distance: self.mar_label.config(
                         text=f"MAR: {mar:.2f}"))
+                    self.root.after(0, lambda pos=pos: self.right_eye_position.config(
+                        text=f"Right eye: {pos}"))
+                    self.root.after(0, lambda leftPos=leftPos: self.left_eye_position.config(
+                        text=f"Left eye: {leftPos}"))
                     
-                    try:
-                        # Get eye tracking data from module if available
-                        image, PointList = m.faceLandmakDetector(frame, gray_frame, face, False)
-                        RightEyePoint = PointList[36:42]
-                        LeftEyePoint = PointList[42:48]
-                        leftRatio, topMid, bottomMid = m.blinkDetector(LeftEyePoint)
-                        rightRatio, rTop, rBottom = m.blinkDetector(RightEyePoint)
-                        
-                        mask, pos, color = m.EyeTracking(frame, gray_frame, RightEyePoint)
-                        maskleft, leftPos, leftColor = m.EyeTracking(frame, gray_frame, LeftEyePoint)
-                        print(pos, leftPos)
-                    except Exception as e:
-                        # Module functions might not be available
-                        pass
                     
                     # Eye drowsiness detection - optimize text size for Pi display
                     if average_ear < self.EYE_AR_THRESHOLD:
