@@ -158,6 +158,7 @@ class DrowsinessDetectionApp:
         self.is_alarm_active = False
         self.closed_eye_start_time = None
         self.yawn_start_time = None
+        self.eye_focus_time = None
         
         # Initialize face detection models
         self.initialize_detection_models()
@@ -407,7 +408,7 @@ class DrowsinessDetectionApp:
                         
                     mask, pos, color = m.EyeTracking(frame, gray_frame, RightEyePoint)
                     maskleft, leftPos, leftColor = m.EyeTracking(frame, gray_frame, LeftEyePoint)
-                    # print(pos, leftPos)
+                    # print(type(pos), type(leftPos))
 
                     # Draw contours
                     cv2.drawContours(display_frame, [cv2.convexHull(left_eye_points)], -1, (0, 255, 0), 1)
@@ -439,7 +440,7 @@ class DrowsinessDetectionApp:
                                 self.play_alarm()
                     else:
                         self.closed_eye_start_time = None
-                        if self.is_alarm_active and not self.yawn_start_time:
+                        if self.is_alarm_active and not self.yawn_start_time and not self.eye_focus_time:
                             self.is_alarm_active = False
                             self.stop_alarm()
 
@@ -447,20 +448,44 @@ class DrowsinessDetectionApp:
                     if distance > self.YAWN_THRESH:
                         if self.yawn_start_time is None:
                             self.yawn_start_time = time.time()
-                        elif time.time() - self.yawn_start_time > 1:  # Reduced from 3s for responsiveness
+                        elif time.time() - self.yawn_start_time > 2:  # Reduced from 3s for responsiveness
                             cv2.putText(display_frame, "ANDA MENGUAP!", (10, 70), 
                                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
                             
                             # Play alarm only if not already active
                             if not self.is_alarm_active:
+                                print("Yawn alarm triggered")
                                 self.is_alarm_active = True
                                 self.play_alarm()
                     else:
                         self.yawn_start_time = None
-                        if self.is_alarm_active and not self.closed_eye_start_time:
+                        if self.is_alarm_active and not self.closed_eye_start_time and not self.eye_focus_time:
                             self.is_alarm_active = False
                             self.stop_alarm()
-
+                    #eye tracking alarm
+                    if pos != "Center" and leftPos != "Center":
+                        if self.eye_focus_time is None:
+                            self.eye_focus_time = time.time()
+                            print("fetch eye focus time")
+                        elif time.time() - self.eye_focus_time > 2:  # Reduced from 3s for responsiveness
+                            cv2.putText(display_frame, "MATA TIDAK FOKUS!", (10, 70), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                            
+                            # Play alarm only if not already active
+                            if not self.is_alarm_active:
+                                print("Eye focus alarm triggered")
+                                print(self.is_alarm_active)
+                                self.is_alarm_active = True
+                                print(self.is_alarm_active)
+                                self.play_alarm()
+                    else:
+                        self.eye_focus_time = None
+                        if (self.is_alarm_active and not self.closed_eye_start_time 
+                                and not self.yawn_start_time):
+                            print("Stopping eye focus alarm")
+                            self.is_alarm_active = False
+                            self.stop_alarm()
+                    
                     # Head tilt detection
                     head_tilt_angle = self.calculate_head_tilt(landmarks)
                     self.root.after(0, lambda angle=head_tilt_angle: self.head_tilt_label.config(
@@ -476,10 +501,10 @@ class DrowsinessDetectionApp:
                             self.play_alarm()
                     else:
                         if (self.is_alarm_active and not self.closed_eye_start_time 
-                                and not self.yawn_start_time):
+                                and not self.yawn_start_time and not self.eye_focus_time):
                             self.is_alarm_active = False
                             self.stop_alarm()
-            
+                            
             # If calibrated but no face detected
             elif self.is_calibrated:
                 cv2.putText(display_frame, "No face detected", (10, 30), 
